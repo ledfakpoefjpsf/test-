@@ -3,7 +3,7 @@ package dev.nova.kingdom.client.render;
 
 import dev.nova.kingdom.entity.LaylaEntity;
 
-import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
@@ -11,7 +11,7 @@ import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.resources.Identifier;
 
 // @name: LaylaRenderer
-// @type: client Java renderer
+// @type: client
 // @location: src/client/java/dev/nova/kingdom/client/render/
 
 public class LaylaRenderer extends HumanoidMobRenderer<
@@ -54,7 +54,7 @@ public class LaylaRenderer extends HumanoidMobRenderer<
     ) {
         super.extractRenderState(entity, state, partialTick);
 
-        // Enable the outer layers of her player skin.
+        // Show all outer layers of Layla's custom skin.
         state.showHat = true;
         state.showJacket = true;
         state.showLeftSleeve = true;
