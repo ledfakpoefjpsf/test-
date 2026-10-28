@@ -1,0 +1,69 @@
+
+plugins {
+    id 'fabric-loom' version '1.19.3'
+    id 'maven-publish'
+}
+
+version = project.property('version')
+group = project.property('group')
+
+base {
+    archivesName = 'kingdom'
+}
+
+repositories {
+    mavenCentral()
+
+    maven {
+        name = 'Fabric'
+        url = 'https://maven.fabricmc.net/'
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+    mappings loom.officialMojangMappings()
+
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+// Capture the version at configuration time
+def modVersion = project.version.toString()
+
+processResources {
+    inputs.property 'version', modVersion
+
+    filesMatching('fabric.mod.json') {
+        expand 'version': modVersion
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+
+    withSourcesJar()
+}
+
+tasks.named('jar', Jar) {
+    from('LICENSE') {
+        rename { "${it}_kingdom" }
+    }
+}
+
+publishing {
+    publications {
+        create('mavenJava', MavenPublication) {
+            artifactId = 'kingdom'
+            from components.java
+        }
+    }
+}
