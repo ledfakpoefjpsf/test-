@@ -21,21 +21,25 @@ import net.minecraft.server.level.ServerPlayer;
 
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-
 import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
-import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.MenuType;
+
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -64,21 +68,18 @@ public class LaylaEntity extends KingdomVillagerEntity {
 
     @Override
     protected void registerGoals() {
-        this.goalSelector.addGoal(0, new FloatGoal(this));
-
         this.goalSelector.addGoal(
-                3,
-                new WaterAvoidingRandomStrollGoal(this, 1.0)
+                0, new FloatGoal(this)
         );
 
         this.goalSelector.addGoal(
-                4,
-                new LookAtPlayerGoal(this, Player.class, 8.0F)
+                4, new LookAtPlayerGoal(
+                        this, Player.class, 8.0F
+                )
         );
 
         this.goalSelector.addGoal(
-                5,
-                new RandomLookAroundGoal(this)
+                5, new RandomLookAroundGoal(this)
         );
     }
 
@@ -117,10 +118,13 @@ public class LaylaEntity extends KingdomVillagerEntity {
 
         if (LaylaTaskController.getTask(this)
                 == LaylaTask.WOODCUTTING) {
-
             LaylaLearningSystem.tickLayla(this, level);
         }
     }
+
+    // ==========================================
+    // RIGHT-CLICK INTERACTION
+    // ==========================================
 
     @Override
     protected InteractionResult mobInteract(
@@ -142,106 +146,41 @@ public class LaylaEntity extends KingdomVillagerEntity {
 
         if (owner == null) {
             LaylaTaskController.setOwner(this, serverPlayer);
+
         } else if (!owner.getUUID()
                 .equals(serverPlayer.getUUID())) {
 
-            send(serverPlayer,
-                    "Layla: Only my owner can give me orders.");
+            serverPlayer.displayClientMessage(
+                    Component.literal(
+                            "Layla: Only my owner can give me orders."
+                    ),
+                    false
+            );
 
             return InteractionResult.SUCCESS;
         }
 
-        // SHIFT + RIGHT-CLICK: INVENTORY
         if (player.isShiftKeyDown()) {
-            openLaylaInventory(serverPlayer);
-            return InteractionResult.SUCCESS;
-        }
-
-        // NORMAL RIGHT-CLICK: ORDERS
-        ItemStack held = player.getMainHandItem();
-
-        LaylaMode mode = null;
-        LaylaTask task = null;
-
-        // Movement modes
-        if (held.is(Items.COMPASS)) {
-            mode = LaylaMode.FOLLOW;
-
-        } else if (held.is(Items.CLOCK)) {
-            mode = LaylaMode.FOLLOW_AND_WORK;
-
-        } else if (held.is(Items.MAP)) {
-            mode = LaylaMode.WORK_INDEPENDENTLY;
-
-        } else if (held.is(Items.WHITE_BED)) {
-            mode = LaylaMode.CHILL;
-        }
-
-        // Work orders
-        else if (held.is(Items.OAK_LOG)) {
-            task = LaylaTask.WOODCUTTING;
-
-        } else if (held.is(Items.IRON_PICKAXE)) {
-            task = LaylaTask.MINING;
-
-        } else if (held.is(Items.WHEAT_SEEDS)) {
-            task = LaylaTask.FARMING;
-
-        } else if (held.is(Items.FISHING_ROD)) {
-            task = LaylaTask.FISHING;
-
-        } else if (held.is(Items.CRAFTING_TABLE)) {
-            task = LaylaTask.CRAFTING;
-
-        } else if (held.is(Items.BRICKS)) {
-            task = LaylaTask.BUILDING;
-
-        } else if (held.is(Items.TORCH)) {
-            task = LaylaTask.EXPLORING;
-        }
-
-        if (mode != null) {
-            LaylaTaskController.setMode(this, mode);
-
-            send(serverPlayer,
-                    "Layla: My mode is now "
-                            + mode.name());
-
-        } else if (task != null) {
-            LaylaTaskController.setTask(this, task);
-
-            send(serverPlayer,
-                    "Layla: My task is now "
-                            + task.name());
-
+            openInventory(serverPlayer);
         } else {
-            send(serverPlayer,
-                    "Layla: Shift + Right-click for inventory.");
-
-            send(serverPlayer,
-                    "Layla: Hold a compass, clock, map, "
-                            + "bed, log, pickaxe, seeds, fishing rod, "
-                            + "crafting table, bricks or torch "
-                            + "and right-click to give an order.");
-
-            send(serverPlayer,
-                    "Current mode: "
-                            + LaylaTaskController.getMode(this)
-                            + " | Task: "
-                            + LaylaTaskController.getTask(this));
+            openOrders(serverPlayer);
         }
 
         return InteractionResult.SUCCESS;
     }
 
-    private void openLaylaInventory(ServerPlayer player) {
+    // ==========================================
+    // 18-SLOT REAL INVENTORY
+    // ==========================================
+
+    private void openInventory(ServerPlayer player) {
         player.openMenu(
                 new SimpleMenuProvider(
-                        (containerId, playerInventory, menuPlayer) ->
+                        (id, inventory, menuPlayer) ->
                                 new ChestMenu(
                                         MenuType.GENERIC_9x2,
-                                        containerId,
-                                        playerInventory,
+                                        id,
+                                        inventory,
                                         LaylaLearningSystem.getInventory(this),
                                         2
                                 ),
@@ -250,15 +189,303 @@ public class LaylaEntity extends KingdomVillagerEntity {
         );
     }
 
-    private void send(
-            ServerPlayer player,
-            String message
-    ) {
-        player.displayClientMessage(
-                Component.literal(message),
-                false
+    // ==========================================
+    // ORDERS GUI
+    // ==========================================
+
+    private void openOrders(ServerPlayer player) {
+        player.openMenu(
+                new SimpleMenuProvider(
+                        (id, inventory, menuPlayer) ->
+                                new LaylaOrdersMenu(
+                                        id, inventory, this
+                                ),
+                        Component.literal("Layla - Orders")
+                )
         );
     }
+
+    // ==========================================
+    // CUSTOM CHEST-BASED COMMAND MENU
+    // ==========================================
+
+    private static class LaylaOrdersMenu extends ChestMenu {
+
+        private final LaylaEntity layla;
+        private final SimpleContainer buttons;
+
+        public LaylaOrdersMenu(
+                int id,
+                Inventory playerInventory,
+                LaylaEntity layla
+        ) {
+            this(
+                    id,
+                    playerInventory,
+                    layla,
+                    new SimpleContainer(27)
+            );
+        }
+
+        private LaylaOrdersMenu(
+                int id,
+                Inventory playerInventory,
+                LaylaEntity layla,
+                SimpleContainer buttons
+        ) {
+            super(
+                    MenuType.GENERIC_9x3,
+                    id,
+                    playerInventory,
+                    buttons,
+                    3
+            );
+
+            this.layla = layla;
+            this.buttons = buttons;
+
+            refreshButtons();
+        }
+
+        private void setButton(
+                int slot,
+                Item item
+        ) {
+            buttons.setItem(
+                    slot,
+                    new ItemStack(item)
+            );
+        }
+
+        private void refreshButtons() {
+
+            buttons.clearContent();
+
+            // Row 1: Movement modes
+            setButton(0, Items.COMPASS);        // Follow
+            setButton(1, Items.CLOCK);          // Follow + Work
+            setButton(2, Items.MAP);            // Independent
+            setButton(3, Items.WHITE_BED);      // Chill
+
+            // Row 2: Work orders
+            setButton(9, Items.OAK_LOG);        // Woodcutting
+            setButton(10, Items.IRON_PICKAXE);  // Mining
+            setButton(11, Items.WHEAT_SEEDS);   // Farming
+            setButton(12, Items.FISHING_ROD);   // Fishing
+            setButton(13, Items.CRAFTING_TABLE);// Crafting
+            setButton(14, Items.BRICKS);        // Building
+            setButton(15, Items.TORCH);         // Exploring
+
+            // Row 3: Information / Inventory
+            setButton(18, Items.CHEST);         // Inventory
+            setButton(22, Items.BOOK);          // Status
+            setButton(26, Items.BARRIER);       // Close
+
+            broadcastChanges();
+        }
+
+        @Override
+        public void clicked(
+                int slotId,
+                int button,
+                ClickType clickType,
+                Player player
+        ) {
+            // The first 27 slots are command buttons.
+            // Never allow them to be taken or replaced.
+            if (slotId >= 0 && slotId < 27) {
+
+                if (!(player instanceof ServerPlayer serverPlayer)) {
+                    return;
+                }
+
+                ServerLevel level = serverPlayer.level();
+
+                ServerPlayer owner =
+                        LaylaTaskController.getOwner(layla, level);
+
+                if (owner == null
+                        || !owner.getUUID().equals(
+                                serverPlayer.getUUID()
+                        )) {
+                    return;
+                }
+
+                if (serverPlayer.distanceToSqr(layla) > 64.0) {
+                    serverPlayer.closeContainer();
+                    return;
+                }
+
+                switch (slotId) {
+
+                    // Movement
+                    case 0 -> changeMode(
+                            serverPlayer,
+                            LaylaMode.FOLLOW
+                    );
+
+                    case 1 -> changeMode(
+                            serverPlayer,
+                            LaylaMode.FOLLOW_AND_WORK
+                    );
+
+                    case 2 -> changeMode(
+                            serverPlayer,
+                            LaylaMode.WORK_INDEPENDENTLY
+                    );
+
+                    case 3 -> changeMode(
+                            serverPlayer,
+                            LaylaMode.CHILL
+                    );
+
+                    // Tasks
+                    case 9 -> changeTask(
+                            serverPlayer,
+                            LaylaTask.WOODCUTTING
+                    );
+
+                    case 10 -> changeTask(
+                            serverPlayer,
+                            LaylaTask.MINING
+                    );
+
+                    case 11 -> changeTask(
+                            serverPlayer,
+                            LaylaTask.FARMING
+                    );
+
+                    case 12 -> changeTask(
+                            serverPlayer,
+                            LaylaTask.FISHING
+                    );
+
+                    case 13 -> changeTask(
+                            serverPlayer,
+                            LaylaTask.CRAFTING
+                    );
+
+                    case 14 -> changeTask(
+                            serverPlayer,
+                            LaylaTask.BUILDING
+                    );
+
+                    case 15 -> changeTask(
+                            serverPlayer,
+                            LaylaTask.EXPLORING
+                    );
+
+                    // Open Layla's real inventory
+                    case 18 -> {
+                        serverPlayer.closeContainer();
+                        layla.openInventory(serverPlayer);
+                    }
+
+                    // Show status
+                    case 22 -> {
+                        send(
+                                serverPlayer,
+                                "Mode: " +
+                                LaylaTaskController.getMode(layla)
+                        );
+
+                        send(
+                                serverPlayer,
+                                "Task: " +
+                                LaylaTaskController.getTask(layla)
+                        );
+                    }
+
+                    // Close menu
+                    case 26 -> serverPlayer.closeContainer();
+
+                    default -> {
+                    }
+                }
+
+                return;
+            }
+
+            // Don't allow shift-clicking or moving items
+            // from the player's inventory into button slots.
+            if (clickType == ClickType.QUICK_MOVE
+                    || clickType == ClickType.QUICK_CRAFT
+                    || clickType == ClickType.SWAP
+                    || clickType == ClickType.PICKUP_ALL) {
+                return;
+            }
+
+            super.clicked(
+                    slotId,
+                    button,
+                    clickType,
+                    player
+            );
+        }
+
+        @Override
+        public ItemStack quickMoveStack(
+                Player player,
+                int index
+        ) {
+            return ItemStack.EMPTY;
+        }
+
+        private void changeMode(
+                ServerPlayer player,
+                LaylaMode mode
+        ) {
+            LaylaTaskController.setMode(layla, mode);
+
+            send(player, "Layla mode: " + mode.name());
+
+            refreshButtons();
+        }
+
+        private void changeTask(
+                ServerPlayer player,
+                LaylaTask task
+        ) {
+            LaylaTaskController.setTask(layla, task);
+
+            // Selecting a task automatically enables work.
+            LaylaMode mode =
+                    LaylaTaskController.getMode(layla);
+
+            if (mode == LaylaMode.CHILL
+                    || mode == LaylaMode.FOLLOW) {
+
+                LaylaTaskController.setMode(
+                        layla,
+                        LaylaMode.FOLLOW_AND_WORK
+                );
+            }
+
+            send(player, "Layla task: " + task.name());
+
+            refreshButtons();
+        }
+
+        private void send(
+                ServerPlayer player,
+                String message
+        ) {
+            player.displayClientMessage(
+                    Component.literal(message),
+                    false
+            );
+        }
+
+        @Override
+        public boolean stillValid(Player player) {
+            return layla.isAlive()
+                    && player.distanceToSqr(layla) <= 64.0;
+        }
+    }
+
+    // ==========================================
+    // AFFECTION SYSTEM
+    // ==========================================
 
     public void adjustAffection(int amount) {
         int current = this.entityData.get(AFFECTION);
