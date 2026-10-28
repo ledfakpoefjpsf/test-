@@ -1,23 +1,21 @@
 package dev.nova.kingdom.client.render;
 
-import dev.nova.kingdom.Kingdom;
 import dev.nova.kingdom.entity.LaylaEntity;
-import net.minecraft.client.render.entity.EntityRendererFactory;
-import net.minecraft.client.render.entity.MobEntityRenderer;
-import net.minecraft.client.render.entity.model.EntityModelLayers;
-import net.minecraft.client.render.entity.model.PlayerEntityModel;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
 
-public class LaylaRenderer extends MobEntityRenderer<LaylaEntity, PlayerEntityModel<LaylaEntity>> {
-
-    private static final Identifier LAYLA_SKIN = Identifier.of(Kingdom.MOD_ID, "textures/entity/layla/layla_queen.png");
-
-    public LaylaRenderer(EntityRendererFactory.Context context) {
-        super(context, new PlayerEntityModel(context.getPart(EntityModelLayers.PLAYER), false), 0.5f);
+/**
+ * Temporary invisible renderer to confirm Layla can spawn without a crash.
+ * Replace with a textured humanoid renderer after the spawn test succeeds.
+ */
+public class LaylaRenderer extends EntityRenderer<LaylaEntity, EntityRenderState> {
+    public LaylaRenderer(EntityRendererProvider.Context context) {
+        super(context);
     }
 
     @Override
-    public Identifier getTexture(LaylaEntity entity) {
-        return LAYLA_SKIN;
+    public EntityRenderState createRenderState() {
+        return new EntityRenderState();
     }
 }

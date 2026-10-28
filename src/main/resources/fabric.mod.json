@@ -12,6 +12,9 @@
   "entrypoints": {
     "main": [
       "dev.nova.kingdom.Kingdom"
+    ],
+    "client": [
+      "dev.nova.kingdom.client.KingdomClient"
     ]
   },
   "depends": {
