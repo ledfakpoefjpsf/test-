@@ -20,17 +20,33 @@ repositories {
     }
 }
 
+loom {
+    // Include src/client/java and src/client/resources
+    splitEnvironmentSourceSets()
+
+    mods {
+        kingdom {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
 dependencies {
+    // Minecraft 1.21.11
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
 
+    // Official Mojang mappings
     mappings loom.officialMojangMappings()
 
+    // Fabric Loader
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
+    // Fabric API
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 }
 
-// Capture the version at configuration time
+// Capture the version during configuration
 def modVersion = project.version.toString()
 
 processResources {
