@@ -6,6 +6,9 @@ package dev.nova.kingdom.entity;
 // @location: src/main/java/dev/nova/kingdom/entity/LaylaEntity.java
 
 import dev.nova.kingdom.ai.LaylaLearningSystem;
+import dev.nova.kingdom.ai.LaylaMode;
+import dev.nova.kingdom.ai.LaylaTask;
+import dev.nova.kingdom.ai.LaylaTaskController;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -24,6 +27,8 @@ import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 public class LaylaEntity extends KingdomVillagerEntity {
@@ -50,9 +55,7 @@ public class LaylaEntity extends KingdomVillagerEntity {
 
     @Override
     protected void registerGoals() {
-        this.goalSelector.addGoal(
-                0, new FloatGoal(this)
-        );
+        this.goalSelector.addGoal(0, new FloatGoal(this));
 
         this.goalSelector.addGoal(
                 3,
@@ -65,7 +68,8 @@ public class LaylaEntity extends KingdomVillagerEntity {
         );
 
         this.goalSelector.addGoal(
-                5, new RandomLookAroundGoal(this)
+                5,
+                new RandomLookAroundGoal(this)
         );
     }
 
@@ -85,45 +89,139 @@ public class LaylaEntity extends KingdomVillagerEntity {
                 .add(Attributes.ATTACK_DAMAGE, 6.0);
     }
 
-    // Run Layla's learning and tree-chopping AI.
     @Override
     public void tick() {
         super.tick();
 
         if (this.level() instanceof ServerLevel serverLevel) {
-            LaylaLearningSystem.tickLayla(this, serverLevel);
+            LaylaTaskController.tick(this, serverLevel);
+
+            if (LaylaTaskController.canWork(this, serverLevel)
+                    && LaylaTaskController.getTask(this)
+                            == LaylaTask.WOODCUTTING) {
+
+                LaylaLearningSystem.tickLayla(
+                        this,
+                        serverLevel
+                );
+            }
         }
     }
 
-    // Shift + Right-click to request collected logs.
     @Override
     protected InteractionResult mobInteract(
             Player player,
             InteractionHand hand
     ) {
-        if (hand == InteractionHand.MAIN_HAND
-                && player.isShiftKeyDown()) {
+        if (hand != InteractionHand.MAIN_HAND
+                || !player.isShiftKeyDown()) {
+            return super.mobInteract(player, hand);
+        }
 
-            if (!this.level().isClientSide()
-                    && player instanceof ServerPlayer serverPlayer) {
+        if (!(player instanceof ServerPlayer serverPlayer)) {
+            return InteractionResult.SUCCESS;
+        }
 
-                LaylaLearningSystem.giveWoodToPlayer(
-                        this,
-                        serverPlayer
-                );
+        ServerLevel level = serverPlayer.level();
 
-                serverPlayer.displayClientMessage(
-                        Component.literal(
-                                "Layla: Here are the logs I've collected!"
-                        ),
-                        false
-                );
-            }
+        ServerPlayer currentOwner =
+                LaylaTaskController.getOwner(this, level);
+
+        // First person to give Layla an order becomes
+        // her owner for this server session.
+        if (currentOwner == null) {
+            LaylaTaskController.setOwner(this, serverPlayer);
+        } else if (!currentOwner.getUUID()
+                .equals(serverPlayer.getUUID())) {
+
+            serverPlayer.displayClientMessage(
+                    Component.literal(
+                            "Layla: I'm already following someone else."
+                    ),
+                    false
+            );
 
             return InteractionResult.SUCCESS;
         }
 
-        return super.mobInteract(player, hand);
+        ItemStack held = player.getMainHandItem();
+
+        LaylaMode mode = null;
+        LaylaTask task = null;
+
+        // Movement orders
+        if (held.is(Items.COMPASS)) {
+            mode = LaylaMode.FOLLOW;
+        } else if (held.is(Items.CLOCK)) {
+            mode = LaylaMode.FOLLOW_AND_WORK;
+        } else if (held.is(Items.MAP)) {
+            mode = LaylaMode.WORK_INDEPENDENTLY;
+        } else if (held.is(Items.WHITE_BED)) {
+            mode = LaylaMode.CHILL;
+        }
+
+        // Task orders
+        else if (held.is(Items.OAK_LOG)) {
+            task = LaylaTask.WOODCUTTING;
+        } else if (held.is(Items.IRON_PICKAXE)) {
+            task = LaylaTask.MINING;
+        } else if (held.is(Items.WHEAT_SEEDS)) {
+            task = LaylaTask.FARMING;
+        } else if (held.is(Items.FISHING_ROD)) {
+            task = LaylaTask.FISHING;
+        } else if (held.is(Items.CRAFTING_TABLE)) {
+            task = LaylaTask.CRAFTING;
+        } else if (held.is(Items.BRICKS)) {
+            task = LaylaTask.BUILDING;
+        } else if (held.is(Items.TORCH)) {
+            task = LaylaTask.EXPLORING;
+        }
+
+        if (mode != null) {
+            LaylaTaskController.setMode(this, mode);
+
+            serverPlayer.displayClientMessage(
+                    Component.literal(
+                            "Layla mode: " + mode.name()
+                    ),
+                    false
+            );
+        } else if (task != null) {
+            LaylaTaskController.setTask(this, task);
+
+            serverPlayer.displayClientMessage(
+                    Component.literal(
+                            "Layla task: " + task.name()
+                    ),
+                    false
+            );
+        } else if (held.isEmpty()) {
+
+            // Empty hand: request collected wood.
+            LaylaLearningSystem.giveWoodToPlayer(
+                    this,
+                    serverPlayer
+            );
+
+            serverPlayer.displayClientMessage(
+                    Component.literal(
+                            "Layla: Here are my collected logs!"
+                    ),
+                    false
+            );
+        } else {
+            serverPlayer.displayClientMessage(
+                    Component.literal(
+                            "Layla: Use a compass, clock, map, "
+                            + "bed, log, pickaxe, seeds, fishing rod, "
+                            + "crafting table, bricks or torch "
+                            + "to give me an order."
+                    ),
+                    false
+            );
+        }
+
+        return InteractionResult.SUCCESS;
     }
 
     public void adjustAffection(int amount) {
