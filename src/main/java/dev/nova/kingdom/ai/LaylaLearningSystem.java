@@ -3,22 +3,23 @@ package dev.nova.kingdom.ai;
 
 // @name: LaylaLearningSystem
 // @type: server-side Java class
-// @location: src/main/java/dev/nova/kingdom/ai/
+// @location: src/main/java/dev/nova/kingdom/ai/LaylaLearningSystem.java
 
 import dev.nova.kingdom.entity.LaylaEntity;
 
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
-import net.fabricmc.fabric.api.lifecycle.v1.ServerTickEvents;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
@@ -34,11 +35,10 @@ public final class LaylaLearningSystem {
     private static final Map<UUID, SimpleContainer> INVENTORIES =
             new HashMap<>();
 
-    private static int ticks = 0;
-
     private LaylaLearningSystem() {
     }
 
+    // Each Layla has her own learning progress.
     public static LaylaBrain getBrain(LaylaEntity layla) {
         return BRAINS.computeIfAbsent(
                 layla.getUUID(),
@@ -46,6 +46,7 @@ public final class LaylaLearningSystem {
         );
     }
 
+    // Each Layla has her own temporary inventory.
     public static SimpleContainer getInventory(LaylaEntity layla) {
         return INVENTORIES.computeIfAbsent(
                 layla.getUUID(),
@@ -55,108 +56,80 @@ public final class LaylaLearningSystem {
 
     public static void register() {
 
-        // Learn when the player breaks logs.
         PlayerBlockBreakEvents.AFTER.register(
                 (world, player, pos, state, blockEntity) -> {
 
-                    if (!(world instanceof ServerLevel level)
-                            || !(player instanceof ServerPlayer owner)
-                            || !state.is(BlockTags.LOGS)) {
+                    if (!(world instanceof ServerLevel level)) {
                         return;
                     }
 
-                    AABB area = new AABB(pos).inflate(12);
+                    if (!(player instanceof ServerPlayer serverPlayer)) {
+                        return;
+                    }
 
-                    for (LaylaEntity layla :
-                            level.getEntitiesOfClass(
-                                    LaylaEntity.class,
-                                    area
-                            )) {
+                    // Layla learns when she watches the player
+                    // break logs near her.
+                    if (state.is(BlockTags.LOGS)) {
 
-                        LaylaBrain brain = getBrain(layla);
+                        AABB area = new AABB(pos).inflate(12.0);
 
-                        int oldXp = brain.getExperience(
-                                LaylaBrain.Skill.WOODCUTTING
-                        );
+                        for (LaylaEntity layla :
+                                level.getEntitiesOfClass(
+                                        LaylaEntity.class,
+                                        area
+                                )) {
 
-                        brain.observe(
-                                LaylaBrain.Skill.WOODCUTTING,
-                                5
-                        );
+                            LaylaBrain brain = getBrain(layla);
 
-                        if (oldXp < 20
-                                && brain.getExperience(
-                                        LaylaBrain.Skill.WOODCUTTING
-                                ) >= 20) {
+                            int previousXp =
+                                    brain.getExperience(
+                                            LaylaBrain.Skill.WOODCUTTING
+                                    );
 
-                            owner.displayClientMessage(
-                                    Component.literal(
-                                            "Layla: I think I can try chopping trees!"
-                                    ),
-                                    false
+                            brain.observe(
+                                    LaylaBrain.Skill.WOODCUTTING,
+                                    5
                             );
+
+                            int currentXp =
+                                    brain.getExperience(
+                                            LaylaBrain.Skill.WOODCUTTING
+                                    );
+
+                            if (previousXp < 20 && currentXp >= 20) {
+                                serverPlayer.displayClientMessage(
+                                        Component.literal(
+                                                "Layla: I think I can chop trees now!"
+                                        ),
+                                        false
+                                );
+                            }
                         }
                     }
                 }
         );
+    }
 
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
+    // Called by Layla's entity tick once connected.
+    public static void tickLayla(
+            LaylaEntity layla,
+            ServerLevel level
+    ) {
 
-            ticks++;
+        // Run once every two seconds.
+        if (layla.tickCount % 40 != 0) {
+            return;
+        }
 
-            // One update every two seconds.
-            if (ticks % 40 != 0) {
-                return;
-            }
+        LaylaBrain brain = getBrain(layla);
 
-            for (ServerLevel level : server.getAllLevels()) {
+        if (!brain.canPractice(
+                LaylaBrain.Skill.WOODCUTTING
+        )) {
+            return;
+        }
 
-                for (ServerPlayer player : level.players()) {
-
-                    AABB area =
-                            player.getBoundingBox().inflate(20);
-
-                    for (LaylaEntity layla :
-                            level.getEntitiesOfClass(
-                                    LaylaEntity.class,
-                                    area
-                            )) {
-
-                        LaylaBrain brain = getBrain(layla);
-
-                        double distance =
-                                layla.distanceToSqr(player);
-
-                        // Stay near the player.
-                        if (distance > 100) {
-                            layla.getNavigation().moveTo(
-                                    player,
-                                    1.15
-                            );
-                            continue;
-                        }
-
-                        if (distance > 25) {
-                            layla.getNavigation().moveTo(
-                                    player,
-                                    1.1
-                            );
-                        }
-
-                        // Practice gathering after learning.
-                        if (brain.canPractice(
-                                LaylaBrain.Skill.WOODCUTTING
-                        )) {
-                            practiceWoodcutting(
-                                    level,
-                                    layla,
-                                    brain
-                            );
-                        }
-                    }
-                }
-            }
-        });
+        practiceWoodcutting(level, layla, brain);
     }
 
     private static void practiceWoodcutting(
@@ -167,7 +140,6 @@ public final class LaylaLearningSystem {
 
         SimpleContainer inventory = getInventory(layla);
 
-        // Do not continue when storage is full.
         if (!inventory.canAddItem(
                 new ItemStack(Items.OAK_LOG)
         )) {
@@ -177,12 +149,11 @@ public final class LaylaLearningSystem {
         BlockPos origin = layla.blockPosition();
         BlockPos target = null;
 
-        // Search close to Layla, not across the whole world.
-        for (BlockPos pos :
-                BlockPos.betweenClosed(
-                        origin.offset(-4, -1, -4),
-                        origin.offset(4, 3, 4)
-                )) {
+        // Look for logs close to Layla.
+        for (BlockPos pos : BlockPos.betweenClosed(
+                origin.offset(-4, -1, -4),
+                origin.offset(4, 3, 4)
+        )) {
 
             BlockState state = level.getBlockState(pos);
 
@@ -190,24 +161,24 @@ public final class LaylaLearningSystem {
                 continue;
             }
 
-            // Only target logs with leaves nearby.
-            // This reduces the chance of dismantling buildings.
-            boolean hasLeaves = false;
+            // Prefer natural trees rather than logs
+            // used in houses or other structures.
+            boolean leavesNearby = false;
 
-            for (BlockPos nearby :
-                    BlockPos.betweenClosed(
-                            pos.offset(-2, 0, -2),
-                            pos.offset(2, 3, 2)
-                    )) {
+            for (BlockPos nearby : BlockPos.betweenClosed(
+                    pos.offset(-2, 0, -2),
+                    pos.offset(2, 3, 2)
+            )) {
 
                 if (level.getBlockState(nearby)
                         .is(BlockTags.LEAVES)) {
-                    hasLeaves = true;
+
+                    leavesNearby = true;
                     break;
                 }
             }
 
-            if (hasLeaves) {
+            if (leavesNearby) {
                 target = pos.immutable();
                 break;
             }
@@ -217,14 +188,14 @@ public final class LaylaLearningSystem {
             return;
         }
 
-        // Walk toward the tree first.
         double distance = layla.distanceToSqr(
                 target.getX() + 0.5,
                 target.getY() + 0.5,
                 target.getZ() + 0.5
         );
 
-        if (distance > 9) {
+        // Walk toward the tree.
+        if (distance > 9.0) {
             layla.getNavigation().moveTo(
                     target.getX() + 0.5,
                     target.getY(),
@@ -240,9 +211,8 @@ public final class LaylaLearningSystem {
             return;
         }
 
-        // Collect the block's normal drops.
-        // This initial version doesn't simulate tool enchantments.
-        var drops = net.minecraft.world.level.block.Block.getDrops(
+        // Get normal block drops.
+        var drops = Block.getDrops(
                 state,
                 level,
                 target,
@@ -253,13 +223,17 @@ public final class LaylaLearningSystem {
             return;
         }
 
+        // Break the log without spawning duplicate drops.
         if (!level.destroyBlock(target, false)) {
             return;
         }
 
         for (ItemStack stack : drops) {
-            ItemStack remainder = inventory.addItem(stack.copy());
 
+            ItemStack remainder =
+                    inventory.addItem(stack.copy());
+
+            // Drop items that do not fit.
             if (!remainder.isEmpty()) {
                 level.addFreshEntity(
                         new ItemEntity(
@@ -279,6 +253,7 @@ public final class LaylaLearningSystem {
         );
     }
 
+    // Transfer collected logs to a player.
     public static void giveWoodToPlayer(
             LaylaEntity layla,
             ServerPlayer player
@@ -292,16 +267,21 @@ public final class LaylaLearningSystem {
 
             ItemStack stack = inventory.getItem(slot);
 
+            // FIX: ItemTags.LOGS instead of
+            // BlockTags.LOGS.asItemTag()
             if (stack.isEmpty()
-                    || !stack.is(BlockTags.LOGS.asItemTag())) {
+                    || !stack.is(ItemTags.LOGS)) {
                 continue;
             }
 
-            ItemStack transferred =
-                    inventory.removeItem(slot, stack.getCount());
+            ItemStack removed =
+                    inventory.removeItem(
+                            slot,
+                            stack.getCount()
+                    );
 
-            if (!player.getInventory().add(transferred)) {
-                player.drop(transferred, false);
+            if (!player.getInventory().add(removed)) {
+                player.drop(removed, false);
             }
         }
     }
