@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "kingdom",
+  "version": "${version}",
+  "name": "Kingdom",
+  "description": "Build your kingdom, raise a family with Layla, train your children, and grow your kingdom with farmers, guards, builders, and more.",
+  "authors": [
+    "Me!"
+  ],
+  "license": "CC0-1.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.nova.kingdom.Kingdom"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
