@@ -2,19 +2,64 @@
 package dev.nova.kingdom.client.render;
 
 import dev.nova.kingdom.entity.LaylaEntity;
-import net.minecraft.client.renderer.entity.EntityRenderer;
-import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.client.renderer.entity.state.EntityRenderState;
 
-// Temporary invisible renderer for testing Layla's spawning.
-public class LaylaRenderer extends EntityRenderer<LaylaEntity, EntityRenderState> {
+import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.resources.Identifier;
+
+// @name: LaylaRenderer
+// @type: client Java renderer
+// @location: src/client/java/dev/nova/kingdom/client/render/
+
+public class LaylaRenderer extends HumanoidMobRenderer<
+        LaylaEntity,
+        AvatarRenderState,
+        PlayerModel> {
+
+    private static final Identifier LAYLA_SKIN =
+            Identifier.fromNamespaceAndPath(
+                    "kingdom",
+                    "textures/entity/layla/layla_queen.png"
+            );
 
     public LaylaRenderer(EntityRendererProvider.Context context) {
-        super(context);
+        super(
+                context,
+                new PlayerModel(
+                        context.bakeLayer(ModelLayers.PLAYER),
+                        false
+                ),
+                0.5F
+        );
     }
 
     @Override
-    public EntityRenderState createRenderState() {
-        return new EntityRenderState();
+    public AvatarRenderState createRenderState() {
+        return new AvatarRenderState();
+    }
+
+    @Override
+    public Identifier getTextureLocation(AvatarRenderState state) {
+        return LAYLA_SKIN;
+    }
+
+    @Override
+    public void extractRenderState(
+            LaylaEntity entity,
+            AvatarRenderState state,
+            float partialTick
+    ) {
+        super.extractRenderState(entity, state, partialTick);
+
+        // Enable the outer layers of her player skin.
+        state.showHat = true;
+        state.showJacket = true;
+        state.showLeftSleeve = true;
+        state.showRightSleeve = true;
+        state.showLeftPants = true;
+        state.showRightPants = true;
     }
 }
