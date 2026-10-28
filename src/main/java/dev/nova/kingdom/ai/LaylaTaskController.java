@@ -9,7 +9,6 @@ import dev.nova.kingdom.entity.LaylaEntity;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.phys.AABB;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,8 +25,7 @@ public final class LaylaTaskController {
     private static final Map<UUID, UUID> OWNERS =
             new HashMap<>();
 
-    private LaylaTaskController() {
-    }
+    private LaylaTaskController() {}
 
     public static LaylaMode getMode(LaylaEntity layla) {
         return MODES.getOrDefault(
@@ -48,6 +46,10 @@ public final class LaylaTaskController {
             LaylaMode mode
     ) {
         MODES.put(layla.getUUID(), mode);
+
+        // Cancel the previous path immediately.
+        layla.getNavigation().stop();
+        layla.setTarget(null);
     }
 
     public static void setTask(
@@ -55,6 +57,10 @@ public final class LaylaTaskController {
             LaylaTask task
     ) {
         TASKS.put(layla.getUUID(), task);
+
+        // Stop traveling toward an old work target.
+        layla.getNavigation().stop();
+        layla.setTarget(null);
     }
 
     public static void setOwner(
@@ -95,28 +101,25 @@ public final class LaylaTaskController {
 
         ServerPlayer owner = getOwner(layla, level);
 
-        if (owner == null
-                || owner.level() != level) {
+        if (owner == null) {
             return false;
         }
 
-        double maxDistance =
-                mode == LaylaMode.FOLLOW_AND_WORK
-                        ? 10.0
-                        : 60.0;
+        if (owner.level() != level) {
+            return false;
+        }
 
-        return layla.distanceToSqr(owner)
-                <= maxDistance * maxDistance;
+        if (mode == LaylaMode.WORK_INDEPENDENTLY) {
+            return true;
+        }
+
+        return layla.distanceToSqr(owner) <= 100.0;
     }
 
     public static void tick(
             LaylaEntity layla,
             ServerLevel level
     ) {
-        if (layla.tickCount % 20 != 0) {
-            return;
-        }
-
         LaylaMode mode = getMode(layla);
 
         if (mode == LaylaMode.CHILL) {
@@ -124,26 +127,39 @@ public final class LaylaTaskController {
             return;
         }
 
-        ServerPlayer owner = getOwner(layla, level);
-
-        if (owner == null
-                || owner.level() != level) {
+        if (mode == LaylaMode.WORK_INDEPENDENTLY) {
+            // Never force independent Layla to follow.
             return;
         }
 
-        double distanceSquared =
-                layla.distanceToSqr(owner);
+        ServerPlayer owner = getOwner(layla, level);
 
-        double limit =
-                mode == LaylaMode.WORK_INDEPENDENTLY
-                        ? 60.0
-                        : 10.0;
+        if (owner == null || owner.level() != level) {
+            return;
+        }
 
-        if (distanceSquared > limit * limit) {
-            layla.getNavigation().moveTo(
-                    owner,
-                    1.2
-            );
+        if (layla.tickCount % 20 != 0) {
+            return;
+        }
+
+        double distance = layla.distanceToSqr(owner);
+
+        if (mode == LaylaMode.FOLLOW) {
+            if (distance > 9.0) {
+                layla.getNavigation().moveTo(owner, 1.1);
+            } else {
+                layla.getNavigation().stop();
+            }
+
+            return;
+        }
+
+        // Follow + Work:
+        // Follow only when far away, otherwise let work AI
+        // control navigation.
+        if (mode == LaylaMode.FOLLOW_AND_WORK
+                && distance > 100.0) {
+            layla.getNavigation().moveTo(owner, 1.1);
         }
     }
 }
