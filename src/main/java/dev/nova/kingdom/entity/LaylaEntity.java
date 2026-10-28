@@ -26,6 +26,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+
 import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
@@ -33,9 +34,14 @@ import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.level.Level;
 
 public class LaylaEntity extends KingdomVillagerEntity {
+
+    // ==========================================
+    // AFFECTION AND EMOTIONS
+    // ==========================================
 
     private static final EntityDataAccessor<Integer> AFFECTION =
             SynchedEntityData.defineId(
@@ -49,6 +55,10 @@ public class LaylaEntity extends KingdomVillagerEntity {
                     EntityDataSerializers.INT
             );
 
+    // ==========================================
+    // CONSTRUCTOR
+    // ==========================================
+
     public LaylaEntity(
             EntityType<? extends LaylaEntity> type,
             Level level
@@ -57,8 +67,13 @@ public class LaylaEntity extends KingdomVillagerEntity {
         this.setPersistenceRequired();
     }
 
+    // ==========================================
+    // AI GOALS
+    // ==========================================
+
     @Override
     protected void registerGoals() {
+
         this.goalSelector.addGoal(
                 0,
                 new FloatGoal(this)
@@ -71,7 +86,11 @@ public class LaylaEntity extends KingdomVillagerEntity {
 
         this.goalSelector.addGoal(
                 4,
-                new LookAtPlayerGoal(this, Player.class, 8.0F)
+                new LookAtPlayerGoal(
+                        this,
+                        Player.class,
+                        8.0F
+                )
         );
 
         this.goalSelector.addGoal(
@@ -79,6 +98,10 @@ public class LaylaEntity extends KingdomVillagerEntity {
                 new RandomLookAroundGoal(this)
         );
     }
+
+    // ==========================================
+    // SYNCHRONIZED DATA
+    // ==========================================
 
     @Override
     protected void defineSynchedData(
@@ -90,12 +113,21 @@ public class LaylaEntity extends KingdomVillagerEntity {
         builder.define(EMOTION_STATE, 0);
     }
 
+    // ==========================================
+    // ATTRIBUTES
+    // ==========================================
+
     public static AttributeSupplier.Builder createLaylaAttributes() {
+
         return Mob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 40.0)
                 .add(Attributes.MOVEMENT_SPEED, 0.3)
                 .add(Attributes.ATTACK_DAMAGE, 6.0);
     }
+
+    // ==========================================
+    // MAIN AI TICK
+    // ==========================================
 
     @Override
     public void tick() {
@@ -105,12 +137,15 @@ public class LaylaEntity extends KingdomVillagerEntity {
             return;
         }
 
+        // Follow / independent work / chill behavior.
         LaylaTaskController.tick(this, level);
 
+        // Maintain tools when Layla is allowed to work.
         if (LaylaTaskController.canWork(this, level)) {
 
             LaylaToolLearning.tick(this);
 
+            // Keep the existing woodcutting system.
             if (LaylaTaskController.getTask(this)
                     == LaylaTask.WOODCUTTING) {
 
@@ -123,7 +158,7 @@ public class LaylaEntity extends KingdomVillagerEntity {
     }
 
     // ==========================================
-    // OPEN LAYLA INVENTORY
+    // SHIFT + RIGHT-CLICK INVENTORY
     // ==========================================
 
     @Override
@@ -137,6 +172,7 @@ public class LaylaEntity extends KingdomVillagerEntity {
             return super.mobInteract(player, hand);
         }
 
+        // Server-side inventory opening.
         if (!(player instanceof ServerPlayer serverPlayer)) {
             return InteractionResult.SUCCESS;
         }
@@ -146,12 +182,14 @@ public class LaylaEntity extends KingdomVillagerEntity {
         ServerPlayer owner =
                 LaylaTaskController.getOwner(this, level);
 
-        // Temporary ownership handling.
+        // First player becomes Layla's owner.
         if (owner == null) {
+
             LaylaTaskController.setOwner(
                     this,
                     serverPlayer
             );
+
         } else if (!owner.getUUID()
                 .equals(serverPlayer.getUUID())) {
 
@@ -170,15 +208,21 @@ public class LaylaEntity extends KingdomVillagerEntity {
         return InteractionResult.SUCCESS;
     }
 
+    // ==========================================
+    // LAYLA INVENTORY MENU
+    // ==========================================
+
     private void openLaylaInventory(ServerPlayer player) {
 
         player.openMenu(
                 new SimpleMenuProvider(
                         (containerId, playerInventory, menuPlayer) ->
-                                ChestMenu.twoRows(
+                                new ChestMenu(
+                                        MenuType.GENERIC_9x2,
                                         containerId,
                                         playerInventory,
-                                        LaylaLearningSystem.getInventory(this)
+                                        LaylaLearningSystem.getInventory(this),
+                                        2
                                 ),
                         Component.literal("Layla's Inventory")
                 )
@@ -190,6 +234,7 @@ public class LaylaEntity extends KingdomVillagerEntity {
     // ==========================================
 
     public void adjustAffection(int amount) {
+
         int current = this.entityData.get(AFFECTION);
 
         int updated = Math.max(
@@ -198,6 +243,7 @@ public class LaylaEntity extends KingdomVillagerEntity {
         );
 
         this.entityData.set(AFFECTION, updated);
+
         this.entityData.set(
                 EMOTION_STATE,
                 updated < 30 ? 2 : 0
@@ -211,6 +257,10 @@ public class LaylaEntity extends KingdomVillagerEntity {
     public int getEmotionState() {
         return this.entityData.get(EMOTION_STATE);
     }
+
+    // ==========================================
+    // DESPAWN PROTECTION
+    // ==========================================
 
     @Override
     public boolean removeWhenFarAway(
